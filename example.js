@@ -36,6 +36,13 @@ async function test2() {
   }
 }
 
+async function test3() {
+  let isTrue = false
+    
+  const data = await sleep()
+  console.log(123123)
+}
+
 
 class Store {
   name = ''

@@ -15,7 +15,7 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                         ImportDeclaration(importNodePath) {
                             const importNode = importNodePath.node;
                             const importSource = importNode.source;
-                            if (importSource.value === 'lodash') {
+                            if (importSource.value === 'lodash' || importSource.value === 'sentry') {
                                 imported = true;
                             }
                         }
@@ -29,6 +29,9 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                 }
             },
             TryStatement(path, state) {
+                if (!path.node.processed) {
+                    return path.skip();
+                }
                 /** 需要给try/catch 里面的东西进行上报 */
                 path.traverse({
                     CatchClause(catchNodePath) {
@@ -45,12 +48,24 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                         if (hasSentryCaptureException) {
                             return;
                         }
+                        const param = catchNode.param;
+                        /**
+                         * 如果没有参数 那么就不需要添加
+                         * try {
+                         *   const data = await sleep()
+                         * } catch {
+                         *   console.log(123)
+                         * }
+                         */
+                        if (param === null || !param?.name) {
+                            return;
+                        }
                         path.node.processed = true;
                         /**
                          * 如果catch body 里面有内容 那么就需要进行上报
                          * TODO: error 有可能是一个变量，所以需要判断一下
                          */
-                        catchBody.body.unshift(api.template.statement(`sentry.captureException(error)`)());
+                        catchBody.body.unshift(api.template.statement(`sentry.captureException(${param.name})`)());
                     }
                 });
             },
@@ -61,6 +76,7 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
             AwaitExpression(path, state) {
                 const node = path.node;
                 const argument = node.argument;
+                /** TODO: 添加catch 生成 */
                 if (argument.type !== 'CallExpression' || argument.callee.type !== 'MemberExpression' || argument.callee.property.name !== 'catch') {
                     return;
                 }
@@ -97,14 +113,82 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                     /** 跳过当前节点 以及它的子节点 */
                     return path.skip();
                 }
+                const { body } = path.node.body;
+                const hasTryCatch = body.some((node) => {
+                    return node.type === 'TryStatement';
+                });
                 // /**
-                //  * 首先先判断它是否含有try catch 语句
+                //  * 首先先判断它是否含有try catch 语句 或者所有有catch语句
                 //  * 如果有的话 那么就不需要再次添加，然后直接添加 sentry.captureException
                 //  * 如果没有的话 那么就需要添加
                 //  */
-                // let hasTryCatch = false
-                // path.traverse({
-                // })
+                if (hasTryCatch) {
+                    // 如果有try catch 那么直接使用上面的TryStatement 即可
+                    path.traverse({
+                        TryStatement(path, state) {
+                            /** 需要给try/catch 里面的东西进行上报 */
+                            path.traverse({
+                                CatchClause(catchNodePath) {
+                                    const catchNode = catchNodePath.node;
+                                    const catchBody = catchNode.body;
+                                    /** 如果catch 中已经包含了 sentry.captureException 那么就不需要添加 */
+                                    const hasSentryCaptureException = catchBody.body.some((node) => {
+                                        return node.type === 'ExpressionStatement'
+                                            && node.expression.type === 'CallExpression'
+                                            && node.expression.callee.type === 'MemberExpression'
+                                            && node.expression.callee.object?.name === 'sentry'
+                                            && node.expression.callee.property?.name === 'captureException';
+                                    });
+                                    if (hasSentryCaptureException) {
+                                        return;
+                                    }
+                                    const param = catchNode.param;
+                                    /**
+                                     * 如果没有参数 那么就不需要添加
+                                     * try {
+                                     *   const data = await sleep()
+                                     * } catch {
+                                     *   console.log(123)
+                                     * }
+                                     */
+                                    if (param === null || !param?.name) {
+                                        return;
+                                    }
+                                    path.node.processed = true;
+                                    /**
+                                     * 如果catch body 里面有内容 那么就需要进行上报
+                                     * TODO: error 有可能是一个变量，所以需要判断一下
+                                     */
+                                    catchBody.body.unshift(api.template.statement(`sentry.captureException(${param.name})`)());
+                                }
+                            });
+                        },
+                    });
+                    return;
+                }
+                // // 构建try/catch
+                // const blocks = blockStatement(body)
+                // const tryCatch = tryStatement(
+                //   blocks,
+                //   catchClause(
+                //     identifier('err'), 
+                //     blockStatement([
+                //       expressionStatement(
+                //           callExpression(
+                //               identifier('console.log'),
+                //               [identifier('123')]
+                //           )
+                //       ),
+                //       expressionStatement(
+                //         callExpression(
+                //             identifier('sentry.captureException'),
+                //             [identifier('err')]
+                //         )
+                //     )
+                //     ])
+                //   )
+                // );
+                // path.node.body.body = [tryCatch]
             }
         }
     };

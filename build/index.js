@@ -29,8 +29,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const path = __importStar(require("path"));
 const babel_plugin_sentry_auto_report_1 = __importDefault(require("./src/babel-plugin-sentry-auto-report"));
 const core_1 = require("@babel/core");
-console.log(process.cwd());
-console.log(path.resolve(process.cwd(), 'example.js'));
 const result = (0, core_1.transformFileSync)(path.resolve(process.cwd(), 'example.js'), {
     plugins: [[babel_plugin_sentry_auto_report_1.default, {
                 outputDir: path.resolve(__dirname, './output')
