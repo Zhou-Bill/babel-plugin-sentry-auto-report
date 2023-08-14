@@ -29,7 +29,7 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                 }
             },
             TryStatement(path, state) {
-                if (!path.node.processed) {
+                if (path.node.processed) {
                     return path.skip();
                 }
                 /** 需要给try/catch 里面的东西进行上报 */
@@ -37,6 +37,7 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                     CatchClause(catchNodePath) {
                         const catchNode = catchNodePath.node;
                         const catchBody = catchNode.body;
+                        path.node.processed = true;
                         /** 如果catch 中已经包含了 sentry.captureException 那么就不需要添加 */
                         const hasSentryCaptureException = catchBody.body.some((node) => {
                             return node.type === 'ExpressionStatement'
@@ -60,7 +61,6 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                         if (param === null || !param?.name) {
                             return;
                         }
-                        path.node.processed = true;
                         /**
                          * 如果catch body 里面有内容 那么就需要进行上报
                          * TODO: error 有可能是一个变量，所以需要判断一下
@@ -76,8 +76,20 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
             AwaitExpression(path, state) {
                 const node = path.node;
                 const argument = node.argument;
-                /** TODO: 添加catch 生成 */
-                if (argument.type !== 'CallExpression' || argument.callee.type !== 'MemberExpression' || argument.callee.property.name !== 'catch') {
+                const t = api.types;
+                if (path.node.processed) {
+                    return path.skip();
+                }
+                if (t.isCallExpression(argument) && argument.callee?.property?.name !== 'catch') {
+                    const catchIdentifier = t.identifier('catch');
+                    const errorFunc = t.arrowFunctionExpression([t.identifier('error')], t.blockStatement([
+                        t.expressionStatement(t.callExpression(t.memberExpression(t.identifier('console'), t.identifier('error')), [t.identifier('error')]))
+                    ]));
+                    const catchExpression = t.callExpression(t.memberExpression(argument, catchIdentifier), [errorFunc]);
+                    path.replaceWith(t.awaitExpression(catchExpression));
+                    return path.skip();
+                }
+                if (argument.callee.type !== 'MemberExpression' || argument.callee.property.name !== 'catch') {
                     return;
                 }
                 const args = argument.arguments;
@@ -90,12 +102,19 @@ exports.default = (0, helper_plugin_utils_1.declare)((api, options) => {
                     return;
                 }
                 let params = catchCallback.params;
+                path.node.processed = true;
                 /** 如果没有参数,  */
                 if (params.length === 0) {
                     catchCallback.params = [api.types.identifier('error')];
                 }
                 const paramsName = catchCallback.params[0].name;
-                console.log(paramsName);
+                const callbackBody = catchCallback.body.body;
+                const hasSentryCaptureException = callbackBody.some((node) => {
+                    return node.type === 'ExpressionStatement' && node.expression.callee.object.name === 'sentry';
+                });
+                if (hasSentryCaptureException) {
+                    return;
+                }
                 /**TODO: 如果有加入sentry，那么就不处理 */
                 // api.types.memberExpression(
                 //   api.types.identifier('sentry'),

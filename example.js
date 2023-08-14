@@ -8,7 +8,7 @@ async function test() {
   	console.log("hahhah")
   });
   const data2 = await sleep().catch((e) => {
-    sentry.captureException(e)
+    // sentry.captureException(e)
   	console.log(e)
   });
   console.log(123)
@@ -44,28 +44,28 @@ async function test3() {
 }
 
 
-class Store {
-  name = ''
-  constructor(name) {
-    this.name = name
-  }
+// class Store {
+//   name = ''
+//   constructor(name) {
+//     this.name = name
+//   }
 
-  async getData() {
-    let isTrue = false
+//   async getData() {
+//     let isTrue = false
     
-    try {
-      const data = await sleep()
-    } catch(e) {
-      const data = await sleep();
+//     try {
+//       const data = await sleep()
+//     } catch(e) {
+//       const data = await sleep();
       
-    }
+//     }
     
-    console.log(123)
-  }
+//     console.log(123)
+//   }
 
-  getData2() {
-  	sleep().then(() => {
-    	console.log("getData")
-    })
-  }
-}
+//   getData2() {
+//   	sleep().then(() => {
+//     	console.log("getData")
+//     })
+//   }
+// }

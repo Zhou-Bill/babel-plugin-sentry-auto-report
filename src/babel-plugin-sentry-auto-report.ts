@@ -2,14 +2,7 @@ import { BabelFile, NodePath } from '@babel/core'
 import { BabelAPI, declare } from '@babel/helper-plugin-utils'
 import { 
   TryStatement, 
-  CatchClause, 
   FunctionExpression, 
-  blockStatement, 
-  tryStatement, 
-  identifier,
-  expressionStatement,
-  callExpression,
-  catchClause
 } from '@babel/types'
 
 type TryStatementNode = NodePath<TryStatement & {
@@ -48,7 +41,7 @@ export default declare((api: BabelAPI, options: any) => {
         }
       },
       TryStatement(path: TryStatementNode, state) {
-        if (!path.node.processed) {
+        if (path.node.processed) {
           return path.skip()
         }
         /** 需要给try/catch 里面的东西进行上报 */
@@ -56,7 +49,7 @@ export default declare((api: BabelAPI, options: any) => {
           CatchClause(catchNodePath) {
             const catchNode = catchNodePath.node
             const catchBody = catchNode.body
-
+            path.node.processed = true;
             /** 如果catch 中已经包含了 sentry.captureException 那么就不需要添加 */
             const hasSentryCaptureException = catchBody.body.some((node) => {
               return node.type === 'ExpressionStatement' 
@@ -85,7 +78,6 @@ export default declare((api: BabelAPI, options: any) => {
               return
             }
 
-            path.node.processed = true;
             /** 
              * 如果catch body 里面有内容 那么就需要进行上报 
              * TODO: error 有可能是一个变量，所以需要判断一下
@@ -103,13 +95,38 @@ export default declare((api: BabelAPI, options: any) => {
       AwaitExpression(path, state) {
         const node = path.node
         const argument = node.argument
+        const t = api.types
 
-        /** TODO: 添加catch 生成 */
-        if (argument.type !== 'CallExpression' || argument.callee.type !== 'MemberExpression' || (argument.callee.property as any).name !== 'catch') {
+        if ((path.node as any).processed) {
+          return path.skip()
+        }
+
+        if (t.isCallExpression(argument) && (argument.callee as any)?.property?.name !== 'catch') {
+          const catchIdentifier = t.identifier('catch');
+          const errorFunc = t.arrowFunctionExpression(
+            [t.identifier('error')],
+            t.blockStatement([
+              t.expressionStatement(
+                t.callExpression(
+                  t.memberExpression(t.identifier('console'), t.identifier('error')),
+                  [t.identifier('error')]
+                )
+              )
+            ])
+          );
+          const catchExpression = t.callExpression(
+            t.memberExpression(argument, catchIdentifier),
+            [errorFunc]
+          );
+          path.replaceWith(t.awaitExpression(catchExpression));
+          return path.skip();
+        }
+
+        if ((argument as any).callee.type !== 'MemberExpression' || ((argument as any).callee.property as any).name !== 'catch') {
           return
         }
 
-        const args = argument.arguments
+        const args = (argument as any).arguments
         if (args.length === 0) {
           return
         }
@@ -120,7 +137,8 @@ export default declare((api: BabelAPI, options: any) => {
           return 
         }
 
-        let params = (catchCallback as any).params
+        let params = (catchCallback as any).params;
+        (path.node as any).processed = true;
 
         /** 如果没有参数,  */
         if (params.length === 0) {
@@ -129,7 +147,15 @@ export default declare((api: BabelAPI, options: any) => {
 
         const paramsName = (catchCallback as any).params[0].name
 
-        console.log(paramsName);
+        const callbackBody = (catchCallback as any).body.body
+
+        const hasSentryCaptureException = callbackBody.some((node) => {
+          return node.type === 'ExpressionStatement' && node.expression.callee.object.name === 'sentry'
+        })
+        if (hasSentryCaptureException) {
+          return;
+        }
+
         /**TODO: 如果有加入sentry，那么就不处理 */
         // api.types.memberExpression(
         //   api.types.identifier('sentry'),
