@@ -3,12 +3,62 @@ import { BabelAPI, declare } from '@babel/helper-plugin-utils'
 import { 
   TryStatement, 
   FunctionExpression, 
+  MemberExpression,
+  Identifier,
+  CallExpression,
 } from '@babel/types'
+import { AwaitExpressionNode, TryStatementNode } from './types'
+import template from "@babel/template";
 
-type TryStatementNode = NodePath<TryStatement & {
-  /** 是否已经处理过 */
-  processed?: boolean
-}>
+const visitorTryStatement = {
+  TryStatement(path: TryStatementNode) {
+    if (path.node.processed) {
+      return path.skip()
+    }
+    /** 需要给try/catch 里面的东西进行上报 */
+    path.traverse({
+      CatchClause(catchNodePath) {
+        const catchNode = catchNodePath.node
+        const catchBody = catchNode.body
+        path.node.processed = true;
+        /** 如果catch 中已经包含了 sentry.captureException 那么就不需要添加 */
+        const hasSentryCaptureException = catchBody.body.some((node) => {
+          return node.type === 'ExpressionStatement' 
+            && node.expression.type === 'CallExpression' 
+
+            && node.expression.callee.type === 'MemberExpression' 
+            && (node.expression.callee.object as any)?.name === 'sentry' 
+            && (node.expression.callee.property as any)?.name === 'captureException'
+        })
+
+        if (hasSentryCaptureException) {
+          return
+        }
+
+        const param = catchNode.param
+
+        /**
+         * 如果没有参数 那么就不需要添加
+         * try {
+         *   const data = await sleep()
+         * } catch {
+         *   console.log(123)
+         * }
+         */
+        if (param === null || !(param as any)?.name) {
+          return
+        }
+
+        /** 
+         * 如果catch body 里面有内容 那么就需要进行上报 
+         */
+        catchBody.body.unshift(
+          template.statement(`sentry.captureException(${(param as any).name})`)()
+        )
+      }
+    })
+  },
+}
 
 export default declare((api: BabelAPI, options: any) => {
   return {
@@ -19,13 +69,13 @@ export default declare((api: BabelAPI, options: any) => {
       Program: {
         enter(path, state) {
           let imported = false
-          /** 如果没有找到lodash 那么就导入他 */
+          /** 如果没有找到sentry 那么就导入他 */
           path.traverse({
             ImportDeclaration(importNodePath) {
               const importNode = importNodePath.node
               const importSource = importNode.source
 
-              if (importSource.value === 'lodash' || importSource.value === 'sentry') {
+              if (importSource.value === 'sentry') {
                 imported = true
               }
             }
@@ -34,81 +84,33 @@ export default declare((api: BabelAPI, options: any) => {
           if (!imported) {
             /** https://babeljs.io/docs/babel-template#templatestatement */
             path.node.body.unshift(
-              // api.template.statement(`import lodash from 'lodash'`)()
               api.template.statement(`import * as sentry from 'sentry'`)()
             )
           }
         }
       },
-      TryStatement(path: TryStatementNode, state) {
-        if (path.node.processed) {
-          return path.skip()
-        }
-        /** 需要给try/catch 里面的东西进行上报 */
-        path.traverse({
-          CatchClause(catchNodePath) {
-            const catchNode = catchNodePath.node
-            const catchBody = catchNode.body
-            path.node.processed = true;
-            /** 如果catch 中已经包含了 sentry.captureException 那么就不需要添加 */
-            const hasSentryCaptureException = catchBody.body.some((node) => {
-              return node.type === 'ExpressionStatement' 
-                && node.expression.type === 'CallExpression' 
-
-                && node.expression.callee.type === 'MemberExpression' 
-                && (node.expression.callee.object as any)?.name === 'sentry' 
-                && (node.expression.callee.property as any)?.name === 'captureException'
-            })
-
-            if (hasSentryCaptureException) {
-              return
-            }
-
-            const param = catchNode.param
-
-            /**
-             * 如果没有参数 那么就不需要添加
-             * try {
-             *   const data = await sleep()
-             * } catch {
-             *   console.log(123)
-             * }
-             */
-            if (param === null || !(param as any)?.name) {
-              return
-            }
-
-            /** 
-             * 如果catch body 里面有内容 那么就需要进行上报 
-             * TODO: error 有可能是一个变量，所以需要判断一下
-             */
-            catchBody.body.unshift(
-              api.template.statement(`sentry.captureException(${(param as any).name})`)()
-            )
-          }
-        })
-      },
+      ...visitorTryStatement,
       /**
        * 处理 await 后面跟着的catch
        * const data = await sleep().catch(() => {})
        */
-      AwaitExpression(path, state) {
+      AwaitExpression(path: AwaitExpressionNode, state) {
         const node = path.node
         const argument = node.argument
         const t = api.types
 
-        if ((path.node as any).processed) {
+        if ((path.node).processed) {
           return path.skip()
         }
 
-        if (t.isCallExpression(argument) && (argument.callee as any)?.property?.name !== 'catch') {
+        if (t.isCallExpression(argument) && ((argument.callee as MemberExpression)?.property as Identifier)?.name !== 'catch') {
           const catchIdentifier = t.identifier('catch');
           const errorFunc = t.arrowFunctionExpression(
             [t.identifier('error')],
             t.blockStatement([
               t.expressionStatement(
                 t.callExpression(
-                  t.memberExpression(t.identifier('console'), t.identifier('error')),
+                  t.memberExpression(t.identifier('sentry'), t.identifier('captureException')),
                   [t.identifier('error')]
                 )
               )
@@ -122,45 +124,46 @@ export default declare((api: BabelAPI, options: any) => {
           return path.skip();
         }
 
-        if ((argument as any).callee.type !== 'MemberExpression' || ((argument as any).callee.property as any).name !== 'catch') {
+        if (
+          t.isCallExpression(argument) 
+          && (
+            ((argument as CallExpression)?.callee).type !== 'MemberExpression' 
+            || (((argument as CallExpression).callee as MemberExpression)?.property as Identifier).name !== 'catch')
+          ) {
           return
         }
 
-        const args = (argument as any).arguments
+        const args = (argument as CallExpression).arguments
         if (args.length === 0) {
           return
         }
         /** catch 回调函数 */
-        const catchCallback = args[0] as unknown as  NodePath<FunctionExpression>
+        const catchCallback: FunctionExpression = args[0] as unknown as FunctionExpression
 
-        if (!(catchCallback as any).body && (catchCallback as any).body.length === 0) {
+        if (!catchCallback.body) {
           return 
         }
 
-        let params = (catchCallback as any).params;
-        (path.node as any).processed = true;
+        let params = catchCallback.params;
+        path.node.processed = true;
 
         /** 如果没有参数,  */
         if (params.length === 0) {
-          (catchCallback as any).params = [api.types.identifier('error')]
+          catchCallback.params = [api.types.identifier('error')]
         }
 
-        const paramsName = (catchCallback as any).params[0].name
+        const paramsName = (catchCallback.params?.[0] as Identifier)?.name
 
-        const callbackBody = (catchCallback as any).body.body
+        const callbackBody = catchCallback.body.body
 
         const hasSentryCaptureException = callbackBody.some((node) => {
-          return node.type === 'ExpressionStatement' && node.expression.callee.object.name === 'sentry'
+          return node.type === 'ExpressionStatement' && (((node.expression as CallExpression).callee as MemberExpression).object as Identifier).name === 'sentry'
         })
+        /** 如果有加入sentry，那么就不处理 */
         if (hasSentryCaptureException) {
           return;
         }
 
-        /**TODO: 如果有加入sentry，那么就不处理 */
-        // api.types.memberExpression(
-        //   api.types.identifier('sentry'),
-        //   api.types.identifier('captureException')
-        // );
         const element = api.types.callExpression(api.types.identifier('sentry.captureException'), [api.types.identifier(paramsName)]);
 
         (catchCallback as any).body.body.unshift(
@@ -192,52 +195,7 @@ export default declare((api: BabelAPI, options: any) => {
         if (hasTryCatch) {
           // 如果有try catch 那么直接使用上面的TryStatement 即可
           path.traverse({
-            TryStatement(path: TryStatementNode, state) {
-              /** 需要给try/catch 里面的东西进行上报 */
-              path.traverse({
-                CatchClause(catchNodePath) {
-                  const catchNode = catchNodePath.node
-                  const catchBody = catchNode.body
-      
-                  /** 如果catch 中已经包含了 sentry.captureException 那么就不需要添加 */
-                  const hasSentryCaptureException = catchBody.body.some((node) => {
-                    return node.type === 'ExpressionStatement' 
-                      && node.expression.type === 'CallExpression' 
-      
-                      && node.expression.callee.type === 'MemberExpression' 
-                      && (node.expression.callee.object as any)?.name === 'sentry' 
-                      && (node.expression.callee.property as any)?.name === 'captureException'
-                  })
-      
-                  if (hasSentryCaptureException) {
-                    return
-                  }
-      
-                  const param = catchNode.param
-      
-                  /**
-                   * 如果没有参数 那么就不需要添加
-                   * try {
-                   *   const data = await sleep()
-                   * } catch {
-                   *   console.log(123)
-                   * }
-                   */
-                  if (param === null || !(param as any)?.name) {
-                    return
-                  }
-      
-                  path.node.processed = true;
-                  /** 
-                   * 如果catch body 里面有内容 那么就需要进行上报 
-                   * TODO: error 有可能是一个变量，所以需要判断一下
-                   */
-                  catchBody.body.unshift(
-                    api.template.statement(`sentry.captureException(${(param as any).name})`)()
-                  )
-                }
-              })
-            },
+            TryStatement: visitorTryStatement.TryStatement
           })
           return
         }

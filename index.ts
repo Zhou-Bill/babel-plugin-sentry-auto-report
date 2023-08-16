@@ -10,4 +10,4 @@ const result = transformFileSync(path.resolve(process.cwd(), 'example.js'), {
   }]]
 })
 
-console.log(result)
+console.log(result?.code?.toString())

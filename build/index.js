@@ -34,5 +34,5 @@ const result = (0, core_1.transformFileSync)(path.resolve(process.cwd(), 'exampl
                 outputDir: path.resolve(__dirname, './output')
             }]]
 });
-console.log(result);
+console.log(result?.code?.toString());
 //# sourceMappingURL=index.js.map
