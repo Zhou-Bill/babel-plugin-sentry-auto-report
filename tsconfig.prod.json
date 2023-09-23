@@ -14,5 +14,8 @@
     "strict": true,                                      /* Enable all strict type-checking options. */
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
-  "include": ["./src/", "index.ts", "./example.js"]
+  "include": ["./src/", "index.ts", "./example.js"],
+  "exclude": [
+    "./commitlint.config.js", "./rollup.config.mjs"
+  ]
 }
