@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import autoReportPlugin from './src/babel-plugin-sentry-auto-report'
+import autoReportPlugin from "babel-plugin-sentry-auto-report"
 
 import { transformFileSync } from '@babel/core'
 
