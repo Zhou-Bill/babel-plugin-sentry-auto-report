@@ -1,10 +1,10 @@
-import { NodePath } from '@babel/core'
-import { 
-  TryStatement, 
-  AwaitExpression,
+import { type NodePath } from '@babel/core'
+import {
+  type TryStatement,
+  type AwaitExpression
 } from '@babel/types'
 
-type ProcessedType = {
+interface ProcessedType {
   /** 是否已经处理过 */
   processed?: boolean
 }

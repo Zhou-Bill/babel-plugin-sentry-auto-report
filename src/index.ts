@@ -12,7 +12,8 @@ import template from '@babel/template'
 const visitorTryStatement = {
   TryStatement (path: TryStatementNode) {
     if (path.node.processed) {
-      path.skip(); return
+      path.skip()
+      return
     }
     /** 需要给try/catch 里面的东西进行上报 */
     path.traverse({
@@ -61,6 +62,7 @@ const visitorTryStatement = {
 
 export default declare((api: BabelAPI, options: any) => {
   return {
+    name: 'sentry-auto-report',
     pre (this, file: BabelFile) {
       this.set('imported', [])
     },

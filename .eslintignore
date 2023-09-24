@@ -13,3 +13,5 @@ jest*
 .eslintrc.js
 commitlint.config.js
 rollup.config.mjs
+.eslintcache
+.eslintrc.cjs
