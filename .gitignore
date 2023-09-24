@@ -1,5 +1,7 @@
 node_modules
 .DS_Store
-build
-es
-libs
+/build
+es/*.js
+libs/*.js
+.eslintcache
+.vscode

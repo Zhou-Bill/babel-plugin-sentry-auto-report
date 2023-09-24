@@ -11,6 +11,11 @@
   },
   "include": ["src", "*.ts", "docs"],
   "exclude": [
-    "./commitlint.config.js", "./rollup.config.mjs", "node_modules", ".eslintrc.cjs"
+    "./commitlint.config.js", 
+    "./rollup.config.mjs", 
+    "node_modules", 
+    ".eslintrc.cjs",
+    "es",
+    "libs"
   ]
 }

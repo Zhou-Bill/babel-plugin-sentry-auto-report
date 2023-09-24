@@ -5,21 +5,31 @@
   "main": "libs/bundle.js",
   "module": "es/bundle.esm.js",
   "type": "module",
+  "homepage": "https://github.com/Zhou-Bill/babel-plugin-sentry-auto-report#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zhou-Bill/babel-plugin-sentry-auto-report.git"
+  },
   "scripts": {
-    "clean": "rimraf build",
+    "clean": "rimraf ./dist ./lib ./es",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint . --fix",
     "dev": "tsc -w",
-    "build": "yarn clean && tsc",
     "start": "node ./build/index.js",
-    "rollup:build": "rollup -c rollup.config.mjs",
-    "example": "pnpm --filter default dev"
+    "build": "rollup -c rollup.config.mjs",
+    "example": "pnpm --filter default dev",
+    "prepare": "husky install && npm run build"
   },
   "keywords": [
     "babel",
     "plugin",
     "sentry",
     "report"
+  ],
+  "files": [
+    "dist",
+    "lib",
+    "es"
   ],
   "author": "",
   "license": "ISC",
