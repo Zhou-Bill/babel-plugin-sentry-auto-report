@@ -1,6 +1,6 @@
 {
   "name": "babel-plugin-sentry-auto-report",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "libs/bundle.js",
   "module": "es/bundle.esm.js",
