@@ -14,7 +14,7 @@
   "devDependencies": {
     "@babel/core": "^7.22.9",
     "@rollup/plugin-json": "^6.0.0",
-    "babel-plugin-sentry-auto-report": "^1.0.0"
+    "babel-plugin-catch-auto-report": "^1.0.1"
   },
   "dependencies": {
     "@babel/preset-typescript": "^7.22.15"

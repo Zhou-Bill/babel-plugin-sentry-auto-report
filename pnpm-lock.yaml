@@ -87,6 +87,9 @@ importers:
       '@rollup/plugin-json':
         specifier: ^6.0.0
         version: 6.0.0(rollup@3.29.2)
+      babel-plugin-catch-auto-report:
+        specifier: ^1.0.1
+        version: link:../..
       babel-plugin-sentry-auto-report:
         specifier: ^1.0.0
         version: link:../..

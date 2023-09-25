@@ -1,5 +1,5 @@
 {
-  "name": "babel-plugin-sentry-auto-report",
+  "name": "babel-plugin-catch-auto-report",
   "version": "1.0.1",
   "description": "",
   "main": "libs/bundle.js",
