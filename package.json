@@ -1,6 +1,6 @@
 {
   "name": "babel-plugin-catch-auto-report",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
   "main": "libs/bundle.js",
   "module": "es/bundle.esm.js",
@@ -31,7 +31,7 @@
     "lib",
     "es"
   ],
-  "author": "",
+  "author": "Bill Zzzz",
   "license": "ISC",
   "devDependencies": {
     "@babel/core": "^7.22.9",
